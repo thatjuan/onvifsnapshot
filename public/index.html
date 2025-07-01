@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Snapshot</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #snapshot {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+    <img id="snapshot" src="/snapshot.jpg" alt="Camera snapshot">
+    
+    <script>
+        // Notify server of connection
+        async function connect() {
+            try {
+                await fetch('/connect');
+            } catch (error) {
+                console.error('Failed to notify connection:', error);
+            }
+        }
+        
+        // Notify server of disconnection
+        async function disconnect() {
+            try {
+                await fetch('/disconnect');
+            } catch (error) {
+                console.error('Failed to notify disconnection:', error);
+            }
+        }
+        
+        // Auto-refresh the image
+        function refreshImage() {
+            const img = document.getElementById('snapshot');
+            const timestamp = new Date().getTime();
+            img.src = `/snapshot.jpg?t=${timestamp}`;
+        }
+        
+        // Connect when page loads
+        connect();
+        
+        // Disconnect when page unloads
+        window.addEventListener('beforeunload', disconnect);
+        window.addEventListener('unload', disconnect);
+        
+        // Also handle page visibility changes
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                disconnect();
+            } else {
+                connect();
+            }
+        });
+        
+        // Refresh every second (faster than server polling to ensure smooth updates)
+        setInterval(refreshImage, 1000);
+        
+        // Handle image errors
+        document.getElementById('snapshot').onerror = function() {
+            console.log('Failed to load snapshot, will retry...');
+        };
+    </script>
+</body>
+</html>
