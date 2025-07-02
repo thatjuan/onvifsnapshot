@@ -60,6 +60,7 @@ async function initializeDevice() {
 async function getSnapshotDirect() {
     try {
         const directUrl = `https://${CAMERA_IP}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=${Date.now()}&user=${CAMERA_USERNAME}&password=${CAMERA_PASSWORD}`;
+        console.log('Attempting direct snapshot from:', directUrl);
         
         const response = await axios.get(directUrl, {
             responseType: 'arraybuffer',
@@ -74,8 +75,10 @@ async function getSnapshotDirect() {
         });
         
         await fs.writeFile(SNAPSHOT_PATH, response.data);
+        console.log('Snapshot saved successfully to:', SNAPSHOT_PATH);
         return true;
     } catch (error) {
+        console.error('Direct snapshot failed:', error.message);
         return false;
     }
 }
@@ -84,12 +87,15 @@ async function getSnapshotDirect() {
 async function getSnapshotONVIF() {
     return new Promise((resolve) => {
         if (!device) {
+            console.log('ONVIF device not initialized');
             resolve(false);
             return;
         }
 
+        console.log('Attempting ONVIF snapshot...');
         device.fetchSnapshot((error, res) => {
             if (error) {
+                console.error('ONVIF snapshot failed:', error.message);
                 resolve(false);
                 return;
             }
@@ -97,12 +103,15 @@ async function getSnapshotONVIF() {
             if (res.headers['content-type'] === 'image/jpeg') {
                 fs.writeFile(SNAPSHOT_PATH, res.body)
                     .then(() => {
+                        console.log('ONVIF snapshot saved successfully to:', SNAPSHOT_PATH);
                         resolve(true);
                     })
                     .catch((err) => {
+                        console.error('Failed to save ONVIF snapshot:', err.message);
                         resolve(false);
                     });
             } else {
+                console.error('ONVIF response not JPEG:', res.headers['content-type']);
                 resolve(false);
             }
         });
@@ -111,8 +120,12 @@ async function getSnapshotONVIF() {
 
 // Main polling function
 async function pollSnapshot() {
+    console.log('Polling snapshot...');
     // Try direct API first, fallback to ONVIF
-    await getSnapshotDirect() || await getSnapshotONVIF();
+    const success = await getSnapshotDirect() || await getSnapshotONVIF();
+    if (!success) {
+        console.error('Both snapshot methods failed');
+    }
 }
 
 // Start polling
@@ -147,6 +160,7 @@ app.get('/', (req, res) => {
 // Client connection tracking endpoint
 app.get('/connect', async (req, res) => {
     connectedClients++;
+    console.log(`Client connected. Total clients: ${connectedClients}`);
     
     // Start polling if this is the first client
     if (connectedClients === 1) {
@@ -168,6 +182,29 @@ app.get('/disconnect', (req, res) => {
     res.json({ status: 'disconnected', clients: connectedClients });
 });
 
+// Debug endpoint to check snapshot file status
+app.get('/debug', async (req, res) => {
+    try {
+        const stats = await fs.stat(SNAPSHOT_PATH);
+        res.json({
+            exists: true,
+            size: stats.size,
+            modified: stats.mtime,
+            path: SNAPSHOT_PATH,
+            clients: connectedClients,
+            polling: pollingInterval !== null
+        });
+    } catch (error) {
+        res.json({
+            exists: false,
+            error: error.message,
+            path: SNAPSHOT_PATH,
+            clients: connectedClients,
+            polling: pollingInterval !== null
+        });
+    }
+});
+
 // Start the server
 async function start() {
     try {
@@ -184,7 +221,11 @@ async function start() {
         // Don't start polling until a client connects
         
         // Start Express server
-        app.listen(PORT);
+        app.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}`);
+            console.log(`Camera IP: ${CAMERA_IP}`);
+            console.log(`Snapshot path: ${SNAPSHOT_PATH}`);
+        });
     } catch (error) {
         process.exit(1);
     }
