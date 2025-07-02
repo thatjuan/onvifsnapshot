@@ -16,13 +16,39 @@ const CAMERA_USERNAME = process.env.CAMERA_USERNAME;
 const CAMERA_PASSWORD = process.env.CAMERA_PASSWORD;
 const ONVIF_PORT = process.env.ONVIF_PORT || 8000;
 const POLLING_INTERVAL = parseInt(process.env.POLLING_INTERVAL) || 5000;
+const INACTIVITY_TIMEOUT = parseInt(process.env.INACTIVITY_TIMEOUT) || 30000; // 30s without client requests stops polling
 
 // Path for the snapshot image
 const SNAPSHOT_PATH = path.join(__dirname, 'public', 'snapshot.jpg');
 
-// Client tracking
+// Track time of last client snapshot request
+let lastSnapshotRequest = 0;
+
+// Client tracking variables (need before routes use them)
 let connectedClients = 0;
 let pollingInterval = null;
+
+// Serve the latest snapshot with strong no-cache headers. Defined early so it executes before the static middleware.
+async function serveSnapshot(res) {
+    try {
+        const data = await fs.readFile(SNAPSHOT_PATH);
+        res.set('Content-Type', 'image/jpeg');
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
+        res.end(data);
+    } catch (error) {
+        console.error('Failed to read snapshot:', error.message);
+        res.status(500).json({ error: 'Snapshot not available' });
+    }
+}
+
+// Snapshot route (fixed filename) placed BEFORE static middleware to override caching.
+app.get('/snapshot.jpg', async (req, res) => {
+    lastSnapshotRequest = Date.now();
+    if (!pollingInterval) await startPolling();
+    await serveSnapshot(res);
+});
 
 // Ensure public directory exists
 async function ensureDirectories() {
@@ -217,6 +243,22 @@ app.get('/test-snapshot', async (req, res) => {
     await pollSnapshot();
     res.json({ message: 'Snapshot test completed, check logs' });
 });
+
+// Dynamic snapshot endpoint to accommodate cache-busting filenames like /snapshot/xyz.jpg
+app.get('/snapshot/:name.jpg', async (req, res) => {
+    lastSnapshotRequest = Date.now();
+    if (!pollingInterval) await startPolling();
+    await serveSnapshot(res);
+});
+
+// Periodically check for inactivity and stop polling if no recent snapshot requests and no tracked clients
+setInterval(() => {
+    const inactive = Date.now() - lastSnapshotRequest > INACTIVITY_TIMEOUT;
+    if (pollingInterval && inactive && connectedClients === 0) {
+        console.log('No snapshot requests for a while – stopping polling');
+        stopPolling();
+    }
+}, INACTIVITY_TIMEOUT);
 
 // Start the server
 async function start() {

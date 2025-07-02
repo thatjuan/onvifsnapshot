@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Camera Snapshot</title>
+    <meta http-equiv="refresh" content="90">
     <style>
         body, html {
             margin: 0;
@@ -27,54 +28,24 @@
     <img id="snapshot" src="/snapshot.jpg" alt="Camera snapshot">
     
     <script>
-        // Notify server of connection
-        async function connect() {
-            try {
-                await fetch('/connect');
-            } catch (error) {
-                console.error('Failed to notify connection:', error);
-            }
+        // Utility to generate a pseudo-random path component
+        function randomSegment() {
+            return Math.random().toString(36).substring(2, 10);
         }
-        
-        // Notify server of disconnection
-        async function disconnect() {
-            try {
-                await fetch('/disconnect');
-            } catch (error) {
-                console.error('Failed to notify disconnection:', error);
-            }
-        }
-        
-        // Auto-refresh the image
+
+        const img = document.getElementById('snapshot');
+
         function refreshImage() {
-            const img = document.getElementById('snapshot');
-            const timestamp = new Date().getTime();
-            img.src = `/snapshot.jpg?t=${timestamp}`;
+            // Request a new filename each time to defeat aggressive caching
+            img.src = `/snapshot/${randomSegment()}.jpg`;
         }
-        
-        // Connect when page loads
-        connect();
-        
-        // Disconnect when page unloads
-        window.addEventListener('beforeunload', disconnect);
-        window.addEventListener('unload', disconnect);
-        
-        // Also handle page visibility changes
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                disconnect();
-            } else {
-                connect();
-            }
-        });
-        
-        // Refresh every second (faster than server polling to ensure smooth updates)
-        setInterval(refreshImage, 1000);
-        
-        // Handle image errors
-        document.getElementById('snapshot').onerror = function() {
-            console.log('Failed to load snapshot, will retry...');
-        };
+
+        // Chain refreshes off the load/error events to avoid reliance on timers
+        img.addEventListener('load', () => setTimeout(refreshImage, 1000));
+        img.addEventListener('error', () => setTimeout(refreshImage, 2000));
+
+        // Kick off the first request
+        refreshImage();
     </script>
 </body>
 </html>
