@@ -11,5 +11,5 @@ services:
     env_file:
       - .env
     volumes:
-      - ./snapshots:/app/snapshots
+      - ./public:/app/public
     restart: unless-stopped

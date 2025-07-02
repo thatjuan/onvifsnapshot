@@ -6,4 +6,4 @@ public/snapshot.jpg
 .git
 .gitignore
 README.md
-docker-compose.*.env
+docker-compose.*.yml
