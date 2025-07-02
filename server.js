@@ -130,14 +130,20 @@ async function pollSnapshot() {
 
 // Start polling
 async function startPolling() {
-    if (pollingInterval) return; // Already polling
+    if (pollingInterval) {
+        console.log('Polling already active');
+        return; // Already polling
+    }
     
     console.log('Starting camera polling');
     // Get initial snapshot
     await pollSnapshot();
     
     // Set up polling interval
-    pollingInterval = setInterval(pollSnapshot, POLLING_INTERVAL);
+    pollingInterval = setInterval(() => {
+        pollSnapshot().catch(console.error);
+    }, POLLING_INTERVAL);
+    console.log(`Polling interval set to ${POLLING_INTERVAL}ms`);
 }
 
 // Stop polling
@@ -203,6 +209,13 @@ app.get('/debug', async (req, res) => {
             polling: pollingInterval !== null
         });
     }
+});
+
+// Test endpoint to trigger immediate snapshot
+app.get('/test-snapshot', async (req, res) => {
+    console.log('Manual snapshot test triggered');
+    await pollSnapshot();
+    res.json({ message: 'Snapshot test completed, check logs' });
 });
 
 // Start the server
